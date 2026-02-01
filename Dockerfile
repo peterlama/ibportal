@@ -2,28 +2,52 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache wget unzip ca-certificates supervisor caddy
+RUN apk add --no-cache wget unzip ca-certificates supervisor tailscale
 
+# -----------------------
 # IBKR gateway
+# -----------------------
 RUN wget https://download2.interactivebrokers.com/portal/clientportal.gw.zip \
     && unzip clientportal.gw.zip -d . \
     && rm clientportal.gw.zip
 
 COPY conf.yaml root/conf.yaml
 
-# Caddy config
-RUN mkdir -p /etc/caddy && <<'EOF' cat > /etc/caddy/Caddyfile
-:443 {
-    tls internal
-    reverse_proxy https://127.0.0.1:5000 {
-        transport http {
-            tls_insecure_skip_verify
-        }
-    }
-}
+RUN mkdir -p /var/lib/tailscale /var/run/tailscale
+
+# -----------------------
+# tailscale init (Option B: HTTPS upstream)
+# -----------------------
+RUN <<'EOF' cat > /usr/local/bin/tailscale-init.sh
+#!/bin/sh
+set -eu
+
+# wait for tailscaled
+until [ -S /var/run/tailscale/tailscaled.sock ]; do sleep 0.2; done
+
+HOST_ARG=""
+if [ "${TS_HOSTNAME:-}" != "" ]; then
+  HOST_ARG="--hostname=${TS_HOSTNAME}"
+fi
+
+tailscale up \
+  --authkey="${TS_AUTHKEY}" \
+  --tun=userspace-networking \
+  --state=/var/lib/tailscale/tailscaled.state \
+  $HOST_ARG
+
+# expose tailnet HTTPS 443 -> local HTTPS 5000
+tailscale serve reset || true
+tailscale serve https:443 https://127.0.0.1:5000
+
+exit 0
 EOF
 
+RUN chmod +x /usr/local/bin/tailscale-init.sh
+
+# -----------------------
 # Supervisor
+# -----------------------
 RUN <<'EOF' cat > /etc/supervisord.conf
 [supervisord]
 nodaemon=true
@@ -38,10 +62,20 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 
-[program:caddy]
-command=/usr/sbin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+[program:tailscaled]
+command=/usr/sbin/tailscaled --tun=userspace-networking --socket=/var/run/tailscale/tailscaled.sock --state=/var/lib/tailscale/tailscaled.state
 autostart=true
 autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:tailscale_init]
+command=/usr/local/bin/tailscale-init.sh
+autostart=true
+autorestart=false
+startsecs=0
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
