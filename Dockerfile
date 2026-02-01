@@ -4,9 +4,7 @@ WORKDIR /app
 
 RUN apk add --no-cache wget unzip ca-certificates supervisor tailscale
 
-# -----------------------
 # IBKR gateway
-# -----------------------
 RUN wget https://download2.interactivebrokers.com/portal/clientportal.gw.zip \
     && unzip clientportal.gw.zip -d . \
     && rm clientportal.gw.zip
@@ -15,14 +13,12 @@ COPY conf.yaml root/conf.yaml
 
 RUN mkdir -p /var/lib/tailscale /var/run/tailscale
 
-# -----------------------
 # tailscale init (Option B: HTTPS upstream)
-# -----------------------
 RUN <<'EOF' cat > /usr/local/bin/tailscale-init.sh
 #!/bin/sh
 set -eu
 
-# wait for tailscaled
+# Wait for tailscaled
 until [ -S /var/run/tailscale/tailscaled.sock ]; do sleep 0.2; done
 
 HOST_ARG=""
@@ -30,24 +26,23 @@ if [ "${TS_HOSTNAME:-}" != "" ]; then
   HOST_ARG="--hostname=${TS_HOSTNAME}"
 fi
 
-tailscale up \
+# IMPORTANT: no --tun here (userspace is on tailscaled)
+tailscale --socket=/var/run/tailscale/tailscaled.sock up \
   --authkey="${TS_AUTHKEY}" \
-  --tun=userspace-networking \
   --state=/var/lib/tailscale/tailscaled.state \
-  $HOST_ARG
+  ${HOST_ARG} \
+  ${TS_EXTRA_ARGS:-}
 
-# expose tailnet HTTPS 443 -> local HTTPS 5000
-tailscale serve reset || true
-tailscale serve https:443 https://127.0.0.1:5000
+tailscale --socket=/var/run/tailscale/tailscaled.sock serve reset || true
+
+# Tailnet :443 -> local HTTPS :5000
+tailscale --socket=/var/run/tailscale/tailscaled.sock serve https:443 https://127.0.0.1:5000
 
 exit 0
 EOF
-
 RUN chmod +x /usr/local/bin/tailscale-init.sh
 
-# -----------------------
 # Supervisor
-# -----------------------
 RUN <<'EOF' cat > /etc/supervisord.conf
 [supervisord]
 nodaemon=true
@@ -83,5 +78,4 @@ stderr_logfile_maxbytes=0
 EOF
 
 EXPOSE 443
-
 CMD ["/usr/bin/supervisord","-c","/etc/supervisord.conf"]
