@@ -18,15 +18,11 @@ RUN <<'EOF' cat > /usr/local/bin/tailscale-init.sh
 #!/bin/sh
 set -eu
 
-# Wait until tailscaled is ready
+# Wait for tailscaled control socket (daemon is running)
 i=0
-until tailscale status >/dev/null 2>&1; do
+while [ ! -S /var/run/tailscale/tailscaled.sock ]; do
   i=$((i+1))
-  if [ "$i" -gt 120 ]; then
-    echo "tailscaled did not become ready" >&2
-    tailscale status || true
-    exit 1
-  fi
+  [ "$i" -gt 120 ] && echo "tailscaled socket not ready" >&2 && exit 1
   sleep 0.25
 done
 
@@ -35,8 +31,16 @@ if [ "${TS_HOSTNAME:-}" != "" ]; then
   HOST_ARG="--hostname=${TS_HOSTNAME}"
 fi
 
-# Login / bring up tailnet (no --tun, no --state here)
-tailscale up --authkey="${TS_AUTHKEY}" ${HOST_ARG} ${TS_EXTRA_ARGS:-}
+# Login / bring up tailnet (retry until it works)
+i=0
+while :; do
+  if tailscale up --authkey="${TS_AUTHKEY}" ${HOST_ARG} ${TS_EXTRA_ARGS:-}; then
+    break
+  fi
+  i=$((i+1))
+  [ "$i" -gt 60 ] && echo "tailscale up failed too many times" >&2 && exit 1
+  sleep 1
+done
 
 # Publish tailnet HTTPS :443 -> local HTTPS :5000
 tailscale serve reset || true
