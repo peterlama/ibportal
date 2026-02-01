@@ -2,23 +2,17 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache wget unzip ca-certificates supervisor curl
+RUN apk add --no-cache wget unzip ca-certificates supervisor caddy
 
-# Install latest Caddy v2 (raw binary download)
-RUN curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" \
-  -o /usr/local/bin/caddy \
-  && chmod +x /usr/local/bin/caddy \
-  && /usr/local/bin/caddy version
-
-# Download IBKR gateway
+# IBKR gateway
 RUN wget https://download2.interactivebrokers.com/portal/clientportal.gw.zip \
     && unzip clientportal.gw.zip -d . \
     && rm clientportal.gw.zip
 
 COPY conf.yaml root/conf.yaml
 
-# Caddy v2 config (443 only)
-RUN <<'EOF' cat > /etc/caddy/Caddyfile
+# Caddy config
+RUN mkdir -p /etc/caddy && <<'EOF' cat > /etc/caddy/Caddyfile
 :443 {
     tls internal
     reverse_proxy https://127.0.0.1:5000 {
@@ -29,7 +23,7 @@ RUN <<'EOF' cat > /etc/caddy/Caddyfile
 }
 EOF
 
-# Supervisor config
+# Supervisor
 RUN <<'EOF' cat > /etc/supervisord.conf
 [supervisord]
 nodaemon=true
@@ -45,7 +39,7 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 
 [program:caddy]
-command=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+command=/usr/sbin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
