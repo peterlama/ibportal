@@ -1,22 +1,23 @@
-FROM openjdk:8u212-jre-alpine3.9
+FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache wget unzip ca-certificates supervisor
+RUN apk add --no-cache wget unzip ca-certificates supervisor curl
 
-# latest Caddy v2
-RUN wget -qO- https://caddyserver.com/api/download?os=linux&arch=amd64 \
-    | tar -xz -C /usr/local/bin caddy \
-    && chmod +x /usr/local/bin/caddy
+# Install latest Caddy v2 (raw binary download)
+RUN curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" \
+  -o /usr/local/bin/caddy \
+  && chmod +x /usr/local/bin/caddy \
+  && /usr/local/bin/caddy version
 
-# IBKR gateway
+# Download IBKR gateway
 RUN wget https://download2.interactivebrokers.com/portal/clientportal.gw.zip \
     && unzip clientportal.gw.zip -d . \
     && rm clientportal.gw.zip
 
 COPY conf.yaml root/conf.yaml
 
-# Caddy config
+# Caddy v2 config (443 only)
 RUN <<'EOF' cat > /etc/caddy/Caddyfile
 :443 {
     tls internal
