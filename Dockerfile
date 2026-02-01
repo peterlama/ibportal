@@ -30,12 +30,13 @@ EOF
 
 # ---- Inline supervisord.conf ----
 RUN <<'EOF' cat > /etc/supervisord.conf
+RUN <<'EOF' cat > /etc/supervisord.conf
 [supervisord]
 nodaemon=true
 
 [program:ibkr_gateway]
-directory=/app
-command=sh /app/bin/run.sh /app/root/conf.yaml
+directory=/app/bin
+command=sh run.sh root/conf.yaml
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -49,6 +50,7 @@ autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 EOF
 
