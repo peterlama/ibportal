@@ -30,7 +30,6 @@ EOF
 
 # ---- Inline supervisord.conf ----
 RUN <<'EOF' cat > /etc/supervisord.conf
-RUN <<'EOF' cat > /etc/supervisord.conf
 [supervisord]
 nodaemon=true
 
