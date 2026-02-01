@@ -40,7 +40,7 @@ tailscale up --authkey="${TS_AUTHKEY}" ${HOST_ARG} ${TS_EXTRA_ARGS:-}
 
 # Publish tailnet HTTPS :443 -> local HTTPS :5000
 tailscale serve reset || true
-tailscale serve https:443 https://127.0.0.1:5000
+tailscale serve --https=443 https+insecure://127.0.0.1:5000
 EOF
 RUN chmod +x /usr/local/bin/tailscale-init.sh
 
